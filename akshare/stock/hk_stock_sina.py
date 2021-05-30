@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 # /usr/bin/env python
 """
-Date: 2021/5/29 15:28
+Date: 2021/5/29 21:45
 Desc: 新浪财经-港股-实时行情数据和历史行情数据(包含前复权和后复权因子)
 http://stock.finance.sina.com.cn/hkstock/quotes/00700.html
 """
@@ -58,7 +58,7 @@ def stock_hk_spot() -> pd.DataFrame:
     return data_df
 
 
-def stock_hk_daily(symbol: str = "00981", adjust: str = "") -> pd.DataFrame:
+def stock_hk_daily(symbol: str = "00981", adjust: str = "qfq") -> pd.DataFrame:
     """
     新浪财经-港股-个股的历史行情数据
     https://stock.finance.sina.com.cn/hkstock/quotes/02912.html
@@ -76,12 +76,15 @@ def stock_hk_daily(symbol: str = "00981", adjust: str = "") -> pd.DataFrame:
         "d", res.text.split("=")[1].split(";")[0].replace('"', "")
     )  # 执行js解密代码
     data_df = pd.DataFrame(dict_list)
+    
     data_df.index = pd.to_datetime(data_df["date"]).dt.date
     del data_df["date"]
-    data_df = data_df.astype("float")
+    # Unify the format
+    data_df.index.name = None
 
+    
+    data_df = data_df.astype("float")
     if adjust == "":
-        data_df.reset_index(inplace=True)
         return data_df
 
     if adjust == "hfq":
@@ -123,11 +126,12 @@ def stock_hk_daily(symbol: str = "00981", adjust: str = "") -> pd.DataFrame:
         temp_df["low"] = temp_df["low"] * temp_df["hfq_factor"] + temp_df["cash"]
         temp_df = temp_df.apply(lambda x: round(x, 4))
         temp_df.dropna(how="any", inplace=True)
-        temp_df = temp_df.iloc[:, :-2]
-        temp_df.reset_index(inplace=True)
-        temp_df.rename({"index": "date"}, axis='columns', inplace=True)
-        temp_df['date'] = temp_df['date'].astype(str)
-        return temp_df
+        # Convert index from pd.timestamp to datetime.date
+        new_index = []
+        for i in temp_df.index:
+            new_index.append(i.to_pydatetime().date())
+        temp_df.index = new_index
+        return temp_df.iloc[:, :-2]
 
     if adjust == "qfq":
         res = requests.get(hk_sina_stock_hist_qfq_url.format(symbol))
@@ -168,11 +172,12 @@ def stock_hk_daily(symbol: str = "00981", adjust: str = "") -> pd.DataFrame:
         temp_df["low"] = temp_df["low"] * temp_df["qfq_factor"]
         temp_df = temp_df.apply(lambda x: round(x, 4))
         temp_df.dropna(how="any", inplace=True)
-        temp_df = temp_df.iloc[:, :-1]
-        temp_df.reset_index(inplace=True)
-        temp_df.rename({"index": "date"}, axis='columns', inplace=True)
-        temp_df['date'] = temp_df['date'].astype(str)
-        return temp_df
+        # Convert index from pd.timestamp to datetime.date
+        new_index = []
+        for i in temp_df.index:
+            new_index.append(i.to_pydatetime().date())
+        temp_df.index = new_index
+        return temp_df.iloc[:, :-1]
 
     if adjust == "hfq-factor":
         res = requests.get(hk_sina_stock_hist_hfq_url.format(symbol))
@@ -182,8 +187,6 @@ def stock_hk_daily(symbol: str = "00981", adjust: str = "") -> pd.DataFrame:
         hfq_factor_df.columns = ["date", "hfq_factor", "cash"]
         hfq_factor_df.index = pd.to_datetime(hfq_factor_df.date)
         del hfq_factor_df["date"]
-        hfq_factor_df.reset_index(inplace=True)
-        hfq_factor_df['date'] = hfq_factor_df['date'].astype(str)
         return hfq_factor_df
 
     if adjust == "qfq-factor":
@@ -194,26 +197,15 @@ def stock_hk_daily(symbol: str = "00981", adjust: str = "") -> pd.DataFrame:
         qfq_factor_df.columns = ["date", "qfq_factor"]
         qfq_factor_df.index = pd.to_datetime(qfq_factor_df.date)
         del qfq_factor_df["date"]
-        qfq_factor_df.reset_index(inplace=True)
-        qfq_factor_df['date'] = qfq_factor_df['date'].astype(str)
         return qfq_factor_df
 
 
 if __name__ == "__main__":
-    stock_hk_daily_hfq_df = stock_hk_daily(symbol="00700", adjust="")
-    print(stock_hk_daily_hfq_df)
-
     stock_hk_daily_hfq_df = stock_hk_daily(symbol="00700", adjust="hfq")
     print(stock_hk_daily_hfq_df)
-
-    stock_hk_daily_hfq_df = stock_hk_daily(symbol="00700", adjust="qfq")
-    print(stock_hk_daily_hfq_df)
-
-    stock_hk_daily_df = stock_hk_daily(symbol="01302", adjust="qfq")
+    stock_hk_daily_df = stock_hk_daily(symbol="01591", adjust="qfq")
     print(stock_hk_daily_df)
-
     stock_hk_daily_hfq_factor_df = stock_hk_daily(symbol="00700", adjust="hfq-factor")
     print(stock_hk_daily_hfq_factor_df)
-
     stock_hk_spot_df = stock_hk_spot()
     print(stock_hk_spot_df)
